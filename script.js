@@ -1,195 +1,252 @@
-const API_KEY = 'YOUR_API_KEY'; // Replace with your TMDB API key
+// Your TMDB API key — change this to your own key!
+const API_KEY = '8a29ba8f1e4d21bf2e9c52061a541f05';
+
+// Base URLs for API and images
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMG_URL = 'https://image.tmdb.org/t/p/w500';
 
-const moviesContainer = document.getElementById('movies');
-const searchInput = document.getElementById('search');
-const pagination = document.getElementById('pagination');
+// Grab elements from the page to update later
+const moviesGrid = document.getElementById('moviesGrid');
+const searchInput = document.getElementById('searchInput');
 const modal = document.getElementById('modal');
-const modalBody = document.getElementById('modal-body');
-const closeBtn = modal.querySelector('.close-btn');
+const modalBody = document.getElementById('modalBody');
+const closeBtn = document.getElementById('closeBtn');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const pageIndicator = document.getElementById('pageIndicator');
+const menuToggle = document.getElementById('menuToggle');
+const navLinks = document.getElementById('navbar');
 
-let currentPage = 1;
-let totalPages = 1;
-let currentQuery = '';
-let isLoading = false;
+let currentPage = 1;      // Track current page for pagination
+let currentQuery = '';    // Current search term, empty means popular movies
+let totalPages = 1;       // Total pages available from API
 
-// Fetch movies either popular or by search query
+// Mobile menu toggle — show/hide nav links when button clicked
+menuToggle.addEventListener('click', () => {
+  // Check current state of menu (expanded or not)
+  const isExpanded = menuToggle.getAttribute('aria-expanded') === 'true';
+  
+  // Toggle the state
+  menuToggle.setAttribute('aria-expanded', !isExpanded);
+  navLinks.classList.toggle('active');
+});
+
+// Function to get movies from TMDB API, either popular or searched
 async function fetchMovies(query = '', page = 1) {
-  if (isLoading) return;
-  isLoading = true;
-  moviesContainer.setAttribute('aria-busy', 'true');
-  moviesContainer.innerHTML = `<p class="loading">Loading movies...</p>`;
-
-  const endpoint = query
-    ? `${BASE_URL}/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(query)}&page=${page}`
-    : `${BASE_URL}/movie/popular?api_key=${API_KEY}&page=${page}`;
+  // Show loading message while waiting
+  moviesGrid.innerHTML = '<p class="loading">Loading movies...</p>';
 
   try {
-    const response = await fetch(endpoint);
+    let url;
+    
+    // If there's a search query, build search API URL, otherwise get popular movies
+    if (query) {
+      url = `${BASE_URL}/search/movie?api_key=${API_KEY}&language=en-US&query=${encodeURIComponent(query)}&page=${page}`;
+    } else {
+      url = `${BASE_URL}/movie/popular?api_key=${API_KEY}&language=en-US&page=${page}`;
+    }
+
+    // Fetch the data from the API
+    const response = await fetch(url);
+
+    // Check for HTTP errors
     if (!response.ok) throw new Error('Failed to fetch movies.');
+
+    // Parse JSON response
     const data = await response.json();
+
+    // Save total pages info for pagination
     totalPages = data.total_pages;
-    displayMovies(data.results);
-    setupPagination(page, totalPages);
+
+    // Display movies on page
+    renderMovies(data.results);
+
+    // Update pagination buttons and display
+    updatePagination();
   } catch (error) {
-    moviesContainer.innerHTML = `<p class="error">Error loading movies: ${error.message}</p>`;
-  } finally {
-    moviesContainer.setAttribute('aria-busy', 'false');
-    isLoading = false;
+    // Show error message if something goes wrong
+    moviesGrid.innerHTML = `<p class="error">Error loading movies: ${error.message}</p>`;
   }
 }
 
-// Display movie cards
-function displayMovies(movies) {
+// Create movie cards on the page
+function renderMovies(movies) {
+  // If no movies found, show message
   if (!movies.length) {
-    moviesContainer.innerHTML = `<p class="no-results">No movies found.</p>`;
+    moviesGrid.innerHTML = '<p>No movies found.</p>';
     return;
   }
 
-  moviesContainer.innerHTML = '';
+  // Clear previous movies
+  moviesGrid.innerHTML = '';
+
   movies.forEach(movie => {
-    const { id, title, poster_path, vote_average } = movie;
+    // Destructure movie details for easy use
+    const {
+      id,
+      title,
+      release_date,
+      poster_path,
+      vote_average,
+      genre_ids = [],
+    } = movie;
+
+    // Extract year from release date or default to N/A
+    const year = release_date ? release_date.split('-')[0] : 'N/A';
+
+    // Use poster image if available, else placeholder
     const poster = poster_path ? IMG_URL + poster_path : 'https://via.placeholder.com/500x750?text=No+Image';
-    
+
+    // Create the card container
     const card = document.createElement('article');
     card.className = 'movie-card';
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
     card.setAttribute('aria-pressed', 'false');
-    card.setAttribute('aria-label', `${title}, rating ${vote_average} stars. Click for details.`);
+    card.setAttribute('aria-label', `${title}, released in ${year}, rating ${vote_average.toFixed(1)}`);
 
+    // Fill the card with content
     card.innerHTML = `
-      <img src="${poster}" alt="Poster of ${title}" loading="lazy" />
+      <img class="movie-poster" src="${poster}" alt="Poster of ${title}" loading="lazy" />
       <div class="movie-info">
-        <h3>${title}</h3>
+        <h3>${title} <span class="release-year">(${year})</span></h3>
+        <div class="genres">${getGenreBadges(genre_ids)}</div>
         <p class="rating">⭐ ${vote_average.toFixed(1)}</p>
+        <button class="btn-book" aria-label="Book ticket for ${title}">Book Ticket</button>
       </div>
     `;
 
+    // When user clicks or presses enter/space on the card, open modal with details
     card.addEventListener('click', () => openModal(id));
-    card.addEventListener('keydown', (e) => {
+    card.addEventListener('keypress', e => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         openModal(id);
       }
     });
 
-    moviesContainer.appendChild(card);
+    // Add card to the grid
+    moviesGrid.appendChild(card);
   });
 }
 
-// Pagination buttons
-function setupPagination(current, total) {
-  pagination.innerHTML = '';
+// Map TMDB genre IDs to genre names
+const genreMap = {
+  28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy',
+  80: 'Crime', 99: 'Documentary', 18: 'Drama', 10751: 'Family',
+  14: 'Fantasy', 36: 'History', 27: 'Horror', 10402: 'Music',
+  9648: 'Mystery', 10749: 'Romance', 878: 'Sci-Fi', 10770: 'TV Movie',
+  53: 'Thriller', 10752: 'War', 37: 'Western'
+};
 
-  const prevBtn = createPageButton('Prev', current > 1, () => {
-    if (current > 1) {
-      currentPage--;
-      fetchMovies(currentQuery, currentPage);
-      scrollToTop();
-    }
-  });
+// Return genre badges HTML based on genre IDs (max 3 genres shown)
+function getGenreBadges(ids) {
+  if (!ids.length) return '<span class="genre-badge">Unknown</span>';
 
-  const nextBtn = createPageButton('Next', current < total, () => {
-    if (current < total) {
-      currentPage++;
-      fetchMovies(currentQuery, currentPage);
-      scrollToTop();
-    }
-  });
-
-  const pageInfo = document.createElement('span');
-  pageInfo.textContent = `Page ${current} of ${total}`;
-  pageInfo.className = 'page-info';
-
-  pagination.appendChild(prevBtn);
-  pagination.appendChild(pageInfo);
-  pagination.appendChild(nextBtn);
+  return ids.slice(0, 3)
+    .map(id => `<span class="genre-badge">${genreMap[id] || 'Other'}</span>`)
+    .join('');
 }
 
-function createPageButton(text, enabled, onClick) {
-  const btn = document.createElement('button');
-  btn.className = 'page-btn';
-  btn.textContent = text;
-  btn.disabled = !enabled;
-  if (enabled) btn.addEventListener('click', onClick);
-  return btn;
-}
-
-function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// Modal handling
+// Show movie details in a modal popup
 async function openModal(movieId) {
-  modalBody.innerHTML = `<p class="loading">Loading details...</p>`;
+  // Show modal and loading message
   modal.classList.remove('hidden');
-  modalBody.focus();
+  modalBody.innerHTML = '<p class="loading">Loading details...</p>';
 
   try {
-    const res = await fetch(`${BASE_URL}/movie/${movieId}?api_key=${API_KEY}`);
-    if (!res.ok) throw new Error('Failed to fetch movie details.');
-    const movie = await res.json();
-    displayModalContent(movie);
+    // Fetch detailed info about the movie
+    const response = await fetch(`${BASE_URL}/movie/${movieId}?api_key=${API_KEY}&language=en-US`);
+    if (!response.ok) throw new Error('Failed to fetch movie details.');
+
+    const movie = await response.json();
+
+    // Destructure needed details
+    const {
+      title,
+      overview,
+      poster_path,
+      vote_average,
+      release_date,
+      genres = [],
+      runtime,
+    } = movie;
+
+    // Use poster or fallback
+    const poster = poster_path ? IMG_URL + poster_path : 'https://via.placeholder.com/500x750?text=No+Image';
+
+    // Fill modal content
+    modalBody.innerHTML = `
+      <h2 id="modalTitle">${title}</h2>
+      <img src="${poster}" alt="Poster of ${title}" loading="lazy" />
+      <p><strong>Rating:</strong> ⭐ ${vote_average.toFixed(1)}</p>
+      <p><strong>Release Date:</strong> ${release_date || 'N/A'}</p>
+      <p><strong>Runtime:</strong> ${runtime ? runtime + ' min' : 'N/A'}</p>
+      <p><strong>Genres:</strong> ${genres.map(g => g.name).join(', ') || 'N/A'}</p>
+      <p>${overview || 'No description available.'}</p>
+    `;
+
+    // Set focus to close button for accessibility
+    closeBtn.focus();
   } catch (error) {
     modalBody.innerHTML = `<p class="error">Error loading details: ${error.message}</p>`;
   }
 }
 
-function displayModalContent(movie) {
-  const {
-    title,
-    overview,
-    poster_path,
-    vote_average,
-    release_date,
-    genres = [],
-    runtime,
-  } = movie;
-
-  const poster = poster_path ? IMG_URL + poster_path : 'https://via.placeholder.com/500x750?text=No+Image';
-
-  modalBody.innerHTML = `
-    <h2 id="modalTitle">${title}</h2>
-    <img src="${poster}" alt="Poster of ${title}" loading="lazy" style="max-width:100%; border-radius: 8px; margin-bottom: 1rem;" />
-    <p><strong>Rating:</strong> ⭐ ${vote_average.toFixed(1)}</p>
-    <p><strong>Release Date:</strong> ${release_date || 'N/A'}</p>
-    <p><strong>Runtime:</strong> ${runtime ? runtime + ' minutes' : 'N/A'}</p>
-    <p><strong>Genres:</strong> ${genres.map(g => g.name).join(', ') || 'N/A'}</p>
-    <p><strong>Overview:</strong><br>${overview || 'No overview available.'}</p>
-  `;
-}
-
-// Close modal
-closeBtn.addEventListener('click', closeModal);
-modal.addEventListener('click', (e) => {
-  if (e.target === modal) closeModal();
+// Close modal when close button clicked
+closeBtn.addEventListener('click', () => {
+  modal.classList.add('hidden');
 });
 
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
-    closeModal();
+// Close modal if user clicks outside modal content
+window.addEventListener('click', (e) => {
+  if (e.target === modal) {
+    modal.classList.add('hidden');
   }
 });
 
-function closeModal() {
-  modal.classList.add('hidden');
-  modalBody.innerHTML = '';
-  // Return focus to search input after closing modal
-  searchInput.focus();
-}
+// Close modal on Escape key press
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+    modal.classList.add('hidden');
+  }
+});
 
-// Search input with debounce
+// Handle search input with debounce to avoid too many API calls
 let debounceTimeout;
+
 searchInput.addEventListener('input', (e) => {
   clearTimeout(debounceTimeout);
+
   debounceTimeout = setTimeout(() => {
     currentQuery = e.target.value.trim();
-    currentPage = 1;
+    currentPage = 1;  // Reset to page 1 on new search
     fetchMovies(currentQuery, currentPage);
   }, 500);
 });
 
-// Initial load popular movies
+// Pagination: go to previous page if not on first
+prevBtn.addEventListener('click', () => {
+  if (currentPage > 1) {
+    currentPage--;
+    fetchMovies(currentQuery, currentPage);
+  }
+});
+
+// Pagination: go to next page if not on last
+nextBtn.addEventListener('click', () => {
+  if (currentPage < totalPages) {
+    currentPage++;
+    fetchMovies(currentQuery, currentPage);
+  }
+});
+
+// Update pagination display and enable/disable buttons
+function updatePagination() {
+  pageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
+  prevBtn.disabled = currentPage === 1;
+  nextBtn.disabled = currentPage === totalPages;
+}
+
+// Load popular movies right away when page loads
 fetchMovies();
