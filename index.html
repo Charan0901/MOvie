@@ -3,34 +3,47 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Movie Explorer | TMDB API</title>
+  <title>Pro Movie App | BookMyShow Style</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="container" role="main" aria-label="Movie Explorer Application">
-    <h1 class="app-title">🎬 Movie Explorer</h1>
+  <header>
+    <div class="logo" tabindex="0">MoviePro</div>
+    <nav id="navbar" class="nav-links">
+      <a href="#" class="nav-item" tabindex="0">Home</a>
+      <a href="contact.html" class="nav-item" tabindex="0">Contact</a>
+    </nav>
+    <div class="search-container">
+      <input
+        id="searchInput"
+        type="search"
+        placeholder="Search movies..."
+        aria-label="Search movies"
+      />
+    </div>
+    <button id="menuToggle" aria-label="Toggle navigation menu" aria-expanded="false">
+      ☰
+    </button>
+  </header>
 
-    <label for="search" class="visually-hidden">Search Movies</label>
-    <input
-      id="search"
-      type="search"
-      placeholder="Search movies..."
-      aria-describedby="searchHelp"
-      autocomplete="off"
-    />
-    <small id="searchHelp" class="sr-only">Type to search movies by title</small>
+  <main>
+    <section id="moviesGrid" class="movies-grid" aria-live="polite" aria-relevant="additions">
+      <!-- Movie cards inserted here by JS -->
+    </section>
 
-    <section id="movies" class="movie-grid" aria-live="polite" aria-busy="false"></section>
-
-    <nav id="pagination" class="pagination" aria-label="Pagination"></nav>
+    <div class="pagination">
+      <button id="prevBtn" aria-label="Previous page" disabled>Prev</button>
+      <span id="pageIndicator" aria-live="polite" aria-atomic="true">Page 1</span>
+      <button id="nextBtn" aria-label="Next page">Next</button>
+    </div>
   </main>
 
-  <aside id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-content">
-      <button class="close-btn" aria-label="Close modal">&times;</button>
-      <div id="modal-body" tabindex="0"></div>
+      <button id="closeBtn" aria-label="Close modal">×</button>
+      <div id="modalBody"></div>
     </div>
-  </aside>
+  </div>
 
   <script src="script.js"></script>
 </body>
